@@ -366,7 +366,7 @@ export function StudentsManagement() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <Button
             variant="secondary"
             icon={Settings2}
