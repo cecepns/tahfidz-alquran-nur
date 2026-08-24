@@ -309,15 +309,15 @@ export function StudentsManagement() {
             row.status === "active"
               ? "success"
               : row.status === "graduated"
-              ? "info"
-              : "danger"
+                ? "info"
+                : "danger"
           }
         >
           {row.status === "active"
             ? "Aktif"
             : row.status === "graduated"
-            ? "Lulus"
-            : "Nonaktif"}
+              ? "Lulus"
+              : "Nonaktif"}
         </Badge>
       ),
     },
@@ -485,17 +485,17 @@ export function StudentsManagement() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <AsyncSelect
-              label="Kelompok Tahfidz (Cari by API)"
+              label="Kelompok Tahfidz"
               placeholder="Ketik untuk mencari kelompok..."
               loadOptions={loadGroupOptions}
               value={
                 formData.group_id
                   ? {
-                      value: formData.group_id,
-                      label:
-                        groups.find((g) => String(g.id) === String(formData.group_id))?.name ||
-                        "Kelompok Terpilih",
-                    }
+                    value: formData.group_id,
+                    label:
+                      groups.find((g) => String(g.id) === String(formData.group_id))?.name ||
+                      "Kelompok Terpilih",
+                  }
                   : null
               }
               onChange={(e) => setFormData({ ...formData, group_id: e.target.value })}
