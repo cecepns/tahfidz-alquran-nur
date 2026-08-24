@@ -152,6 +152,24 @@ CREATE TABLE IF NOT EXISTS `memorization_targets` (
   CONSTRAINT `fk_mt_student` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 10. TARGET OPTIONS MASTER
+CREATE TABLE IF NOT EXISTS `target_options` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `name` VARCHAR(100) NOT NULL UNIQUE,
+  `description` VARCHAR(255) NULL,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO `target_options` (`name`, `description`) VALUES
+('Juz 30 (An-Naba s.d An-Nas)', 'Target dasar Juz 30 Juz Amma'),
+('Juz 30 & 29 (Al-Mulk s.d An-Nas)', 'Target 2 Juz (Juz 30 dan 29)'),
+('Juz 28 - 30 (3 Juz)', 'Target 3 Juz (Juz 28, 29, 30)'),
+('Target 5 Juz', 'Target 5 Juz Al-Quran'),
+('Target 10 Juz', 'Target 10 Juz Al-Quran'),
+('Khatam 30 Juz (Tahfidz Mutqin)', 'Khatam 30 Juz Mutqin')
+ON DUPLICATE KEY UPDATE description=VALUES(description);
+
 -- 10. ATTENDANCE TABLE
 CREATE TABLE IF NOT EXISTS `attendance` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,

@@ -1638,6 +1638,87 @@ app.get('/api/targets', verifyToken, async (req, res) => {
   }
 });
 
+// TARGET OPTIONS MASTER API (Dynamic Target Options CRUD)
+app.get('/api/target-options', async (req, res) => {
+  try {
+    // Ensure table exists
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS \`target_options\` (
+        \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+        \`name\` VARCHAR(100) NOT NULL UNIQUE,
+        \`description\` VARCHAR(255) NULL,
+        \`is_active\` TINYINT(1) NOT NULL DEFAULT 1,
+        \`created_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // Ensure seed default options
+    const existing = await db.query('SELECT COUNT(*) as count FROM `target_options`');
+    if (existing[0]?.count === 0) {
+      await db.query(`
+        INSERT INTO \`target_options\` (\`name\`, \`description\`) VALUES
+        ('Juz 30 (An-Naba s.d An-Nas)', 'Target dasar Juz 30 Juz Amma'),
+        ('Juz 30 & 29 (Al-Mulk s.d An-Nas)', 'Target 2 Juz (Juz 30 dan 29)'),
+        ('Juz 28 - 30 (3 Juz)', 'Target 3 Juz (Juz 28, 29, 30)'),
+        ('Target 5 Juz', 'Target 5 Juz Al-Quran'),
+        ('Target 10 Juz', 'Target 10 Juz Al-Quran'),
+        ('Khatam 30 Juz (Tahfidz Mutqin)', 'Khatam 30 Juz Mutqin')
+      `);
+    }
+
+    const options = await db.query('SELECT * FROM `target_options` WHERE is_active = 1 ORDER BY id ASC');
+    res.json({ success: true, data: options });
+  } catch (err) {
+    console.error('Target options error:', err);
+    res.status(500).json({ success: false, message: 'Gagal mengambil opsi target hafalan.' });
+  }
+});
+
+app.post('/api/target-options', verifyToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const { name, description } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: 'Nama target wajib diisi.' });
+    }
+
+    const result = await db.query(
+      'INSERT INTO `target_options` (name, description, is_active) VALUES (?, ?, 1)',
+      [name.trim(), description || null]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Opsi target berhasil ditambahkan.',
+      data: { id: result.insertId, name: name.trim(), description }
+    });
+  } catch (err) {
+    console.error('Create target option error:', err);
+    res.status(500).json({ success: false, message: 'Gagal menambahkan opsi target (mungkin sudah ada).' });
+  }
+});
+
+app.put('/api/target-options/:id', verifyToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const { name, description, is_active } = req.body;
+    await db.query(
+      'UPDATE `target_options` SET name = COALESCE(?, name), description = COALESCE(?, description), is_active = COALESCE(?, is_active) WHERE id = ?',
+      [name ? name.trim() : null, description, is_active, req.params.id]
+    );
+    res.json({ success: true, message: 'Opsi target berhasil diperbarui.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Gagal memperbarui opsi target.' });
+  }
+});
+
+app.delete('/api/target-options/:id', verifyToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await db.query('DELETE FROM `target_options` WHERE id = ?', [req.params.id]);
+    res.json({ success: true, message: 'Opsi target berhasil dihapus.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Gagal menghapus opsi target.' });
+  }
+});
+
 app.post('/api/targets', verifyToken, requireRole(['admin', 'guru']), async (req, res) => {
   try {
     const { student_id, target_title, target_juz, target_surah_id, start_date, end_date, progress_percent, notes } = req.body;

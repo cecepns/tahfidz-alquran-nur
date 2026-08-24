@@ -5,10 +5,10 @@ import { Button } from "../../components/common/Button";
 import { Modal } from "../../components/common/Modal";
 import { ConfirmModal } from "../../components/common/ConfirmModal";
 import { Input, Textarea } from "../../components/common/Input";
-import { Select } from "../../components/common/Select";
+import { Select, AsyncSelect } from "../../components/common/Select";
 import { Badge } from "../../components/common/Badge";
 import { Table } from "../../components/common/Table";
-import { Plus, Edit2, Trash2, Users, Calendar, Clock, FolderGit2 } from "lucide-react";
+import { Plus, Edit2, Trash2, Calendar, Clock } from "lucide-react";
 import toast from "react-hot-toast";
 
 export function GroupsManagement() {
@@ -40,8 +40,8 @@ export function GroupsManagement() {
         request.get(API_ENDPOINTS.GROUPS.LIST),
         request.get(API_ENDPOINTS.TEACHERS.LIST, { limit: 100 }),
       ]);
-      if (resGroups.success) setGroups(resGroups.data);
-      if (resTeachers.success) setTeachers(resTeachers.data);
+      if (resGroups.success) setGroups(resGroups.data || []);
+      if (resTeachers.success) setTeachers(resTeachers.data || []);
     } catch (err) {
       toast.error("Gagal memuat data kelompok.");
     } finally {
@@ -52,6 +52,25 @@ export function GroupsManagement() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Async load for teachers
+  const loadTeacherOptions = async (inputValue) => {
+    try {
+      const res = await request.get(API_ENDPOINTS.TEACHERS.LIST, {
+        search: inputValue || "",
+        limit: 50,
+      });
+      if (res.success) {
+        return (res.data || []).map((t) => ({
+          value: t.id,
+          label: `${t.full_name} (${t.gender === "L" ? "Ustadz" : "Ustadzah"} - ${t.nip || "NIP Belum Diisi"})`,
+        }));
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
+  };
 
   const handleOpenCreate = () => {
     setSelectedGroup(null);
@@ -166,6 +185,15 @@ export function GroupsManagement() {
       ),
     },
     {
+      header: "Target Hafalan",
+      accessor: "target_description",
+      render: (row) => (
+        <span className="text-xs font-medium text-emerald-800 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-md">
+          {row.target_description || "Target Juz 30"}
+        </span>
+      ),
+    },
+    {
       header: "Santri",
       accessor: "total_students",
       render: (row) => (
@@ -185,13 +213,13 @@ export function GroupsManagement() {
     },
     {
       header: "Aksi",
-      align: "right",
+      className: "text-right",
       render: (row) => (
         <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
           <button
             type="button"
             onClick={() => handleOpenEdit(row)}
-            className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition-colors"
+            className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
             title="Edit Kelompok"
           >
             <Edit2 className="w-4 h-4" />
@@ -212,23 +240,29 @@ export function GroupsManagement() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
         <div>
-          <h2 className="text-xl font-bold text-slate-800">Manajemen Kelompok Tahfidz</h2>
-          <p className="text-xs text-slate-500">Bagi santri ke dalam kelompok halaqah dan tentukan ustadz pembimbingnya</p>
+          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-800 tracking-tight">
+            Manajemen Kelompok Tahfidz
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Bagi santri ke dalam kelompok halaqah dan tentukan ustadz pembimbingnya.
+          </p>
         </div>
-        <Button onClick={handleOpenCreate} icon={Plus}>
+        <Button onClick={handleOpenCreate} icon={Plus} className="shadow-lg shadow-emerald-600/20">
           Buat Kelompok Baru
         </Button>
       </div>
 
-      <Table
-        columns={columns}
-        data={groups}
-        loading={loading}
-        emptyTitle="Belum Ada Kelompok"
-        emptyDescription="Silakan buat kelompok tahfidz seperti Tahfidz A, Remaja, atau Anak-Anak."
-      />
+      <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+        <Table
+          columns={columns}
+          data={groups}
+          loading={loading}
+          emptyTitle="Belum Ada Kelompok"
+          emptyDescription="Silakan buat kelompok tahfidz seperti Tahfidz A, Remaja, atau Anak-Anak."
+        />
+      </div>
 
       {/* Form Modal */}
       <Modal
@@ -247,12 +281,21 @@ export function GroupsManagement() {
             required
           />
 
-          <Select
-            label="Guru / Ustadz Pembimbing"
-            value={formData.teacher_id}
+          <AsyncSelect
+            label="Guru / Ustadz Pembimbing (Search by API)"
+            placeholder="Ketik nama atau NIP guru..."
+            loadOptions={loadTeacherOptions}
+            value={
+              formData.teacher_id
+                ? {
+                    value: formData.teacher_id,
+                    label:
+                      teachers.find((t) => String(t.id) === String(formData.teacher_id))?.full_name ||
+                      "Guru Terpilih",
+                  }
+                : null
+            }
             onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value })}
-            placeholder="-- Pilih Guru Pembimbing --"
-            options={teachers.map((t) => ({ value: t.id, label: `${t.full_name} (${t.gender === "L" ? "Ustadz" : "Ustadzah"})` }))}
           />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -288,7 +331,7 @@ export function GroupsManagement() {
             <Button variant="secondary" onClick={() => setIsFormOpen(false)} disabled={formLoading}>
               Batal
             </Button>
-            <Button type="submit" loading={formLoading}>
+            <Button type="submit" variant="primary" loading={formLoading}>
               {selectedGroup ? "Simpan Perubahan" : "Buat Kelompok"}
             </Button>
           </div>

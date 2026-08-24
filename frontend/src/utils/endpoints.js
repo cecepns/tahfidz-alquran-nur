@@ -55,6 +55,13 @@ export const API_ENDPOINTS = {
     CREATE: "/targets",
   },
 
+  TARGET_OPTIONS: {
+    LIST: "/target-options",
+    CREATE: "/target-options",
+    UPDATE: (id) => `/target-options/${id}`,
+    DELETE: (id) => `/target-options/${id}`,
+  },
+
   QURAN: {
     SURAHS: "/quran/surahs",
   },

@@ -9,9 +9,10 @@ import { Button } from "../../components/common/Button";
 import { Modal } from "../../components/common/Modal";
 import { ConfirmModal } from "../../components/common/ConfirmModal";
 import { Input, Textarea } from "../../components/common/Input";
-import { Select } from "../../components/common/Select";
+import { Select, AsyncSelect } from "../../components/common/Select";
+import { TargetOptionsModal } from "../../components/common/TargetOptionsModal";
 import { Badge } from "../../components/common/Badge";
-import { Plus, Edit2, Trash2, Eye, UserCheck, GraduationCap } from "lucide-react";
+import { Plus, Edit2, Trash2, Eye, UserCheck, GraduationCap, Settings2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 
@@ -19,6 +20,7 @@ export function StudentsManagement() {
   const navigate = useNavigate();
   const [students, setStudents] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [targetOptions, setTargetOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedGroup, setSelectedGroup] = useState("");
@@ -36,6 +38,7 @@ export function StudentsManagement() {
   // Modals state
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isTargetModalOpen, setIsTargetModalOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [formLoading, setFormLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -52,7 +55,7 @@ export function StudentsManagement() {
     phone: "",
     parent_name: "",
     parent_phone: "",
-    target_juz: "Juz 30",
+    target_juz: "Juz 30 (An-Naba s.d An-Nas)",
     group_id: "",
     status: "active",
     username: "",
@@ -62,7 +65,18 @@ export function StudentsManagement() {
   const fetchGroups = async () => {
     try {
       const res = await request.get(API_ENDPOINTS.GROUPS.LIST);
-      if (res.success) setGroups(res.data);
+      if (res.success) setGroups(res.data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchTargetOptions = async () => {
+    try {
+      const res = await request.get(API_ENDPOINTS.TARGET_OPTIONS.LIST);
+      if (res.success && res.data) {
+        setTargetOptions(res.data);
+      }
     } catch (err) {
       console.error(err);
     }
@@ -90,14 +104,36 @@ export function StudentsManagement() {
 
   useEffect(() => {
     fetchGroups();
+    fetchTargetOptions();
   }, []);
 
   useEffect(() => {
     fetchStudents();
   }, [fetchStudents]);
 
+  // Async search for Groups
+  const loadGroupOptions = async (inputValue) => {
+    try {
+      const res = await request.get(API_ENDPOINTS.GROUPS.LIST);
+      if (res.success) {
+        const list = res.data || [];
+        const filtered = list.filter((g) =>
+          g.name.toLowerCase().includes((inputValue || "").toLowerCase())
+        );
+        return filtered.map((g) => ({
+          value: g.id,
+          label: `${g.name} (${g.teacher_name || "Belum ada ustadz"})`,
+        }));
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
+  };
+
   const handleOpenCreate = () => {
     setSelectedStudent(null);
+    const defaultTarget = targetOptions[0]?.name || "Juz 30 (An-Naba s.d An-Nas)";
     setFormData({
       nis: `SNT-${Date.now().toString().slice(-6)}`,
       nik: "",
@@ -109,7 +145,7 @@ export function StudentsManagement() {
       phone: "",
       parent_name: "",
       parent_phone: "",
-      target_juz: "Juz 30",
+      target_juz: defaultTarget,
       group_id: "",
       status: "active",
       username: "",
@@ -131,7 +167,7 @@ export function StudentsManagement() {
       phone: student.phone || "",
       parent_name: student.parent_name || "",
       parent_phone: student.parent_phone || "",
-      target_juz: student.target_juz || "Juz 30",
+      target_juz: student.target_juz || targetOptions[0]?.name || "Juz 30",
       group_id: student.group_id || "",
       status: student.status || "active",
       username: student.username || "",
@@ -197,29 +233,51 @@ export function StudentsManagement() {
 
   const columns = [
     {
-      header: "NIS & Santri",
+      header: "Santri",
       accessor: "full_name",
       render: (row) => (
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-xs flex-shrink-0">
-            {row.full_name?.charAt(0)}
+          <div className="w-10 h-10 rounded-full bg-emerald-100 border border-emerald-200 flex items-center justify-center font-bold text-emerald-800 text-sm overflow-hidden flex-shrink-0">
+            {row.photo ? (
+              <img
+                src={row.photo}
+                alt={row.full_name}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              row.full_name.charAt(0).toUpperCase()
+            )}
           </div>
           <div>
-            <p className="font-bold text-slate-800 text-sm hover:text-emerald-700 cursor-pointer" onClick={() => navigate(`/students/${row.id}`)}>
+            <div className="font-bold text-slate-800 hover:text-emerald-700 transition-colors">
               {row.full_name}
-            </p>
-            <p className="text-xs text-slate-400">NIS: {row.nis}</p>
+            </div>
+            <div className="text-xs text-slate-500 font-mono flex items-center gap-1.5 mt-0.5">
+              <span>NIS: {row.nis}</span>
+              <span>•</span>
+              <span>{row.gender === "L" ? "Ikhwan" : "Akhwat"}</span>
+            </div>
           </div>
         </div>
       ),
     },
     {
-      header: "Kelompok & Pembimbing",
+      header: "Kelompok / Halaqah",
       accessor: "group_name",
       render: (row) => (
         <div>
-          <p className="text-xs font-bold text-slate-700">{row.group_name || "Belum ditentukan"}</p>
-          <p className="text-[11px] text-slate-500">{row.teacher_name ? `Ust. ${row.teacher_name}` : "-"}</p>
+          {row.group_name ? (
+            <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-100">
+              {row.group_name}
+            </span>
+          ) : (
+            <span className="text-xs text-slate-400 italic">Belum ada kelompok</span>
+          )}
+          {row.teacher_name && (
+            <p className="text-[11px] text-slate-500 mt-1">
+              Ust. {row.teacher_name}
+            </p>
+          )}
         </div>
       ),
     },
@@ -227,18 +285,18 @@ export function StudentsManagement() {
       header: "Target Hafalan",
       accessor: "target_juz",
       render: (row) => (
-        <Badge variant="emerald" size="sm">
+        <span className="text-xs font-medium text-slate-700 bg-slate-100 px-2.5 py-1 rounded-md">
           {row.target_juz || "Juz 30"}
-        </Badge>
+        </span>
       ),
     },
     {
-      header: "Orang Tua / Wali",
+      header: "Wali Santri & Kontak",
       accessor: "parent_name",
       render: (row) => (
         <div className="text-xs">
           <p className="font-semibold text-slate-700">{row.parent_name || "-"}</p>
-          <p className="text-slate-400">{row.parent_phone || "-"}</p>
+          <p className="text-slate-500 font-mono mt-0.5">{row.parent_phone || row.phone || "-"}</p>
         </div>
       ),
     },
@@ -246,40 +304,50 @@ export function StudentsManagement() {
       header: "Status",
       accessor: "status",
       render: (row) => (
-        <Badge variant={row.status === "active" ? "emerald" : "amber"} size="sm">
-          {row.status === "active" ? "Aktif" : "Nonaktif"}
+        <Badge
+          variant={
+            row.status === "active"
+              ? "success"
+              : row.status === "graduated"
+              ? "info"
+              : "danger"
+          }
+        >
+          {row.status === "active"
+            ? "Aktif"
+            : row.status === "graduated"
+            ? "Lulus"
+            : "Nonaktif"}
         </Badge>
       ),
     },
     {
       header: "Aksi",
-      align: "right",
+      className: "text-right",
       render: (row) => (
-        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-          <button
-            type="button"
-            onClick={() => navigate(`/students/${row.id}`)}
-            className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-slate-100 rounded-lg transition-colors"
-            title="Lihat Profil Lengkap"
-          >
-            <Eye className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
+        <div className="flex items-center justify-end gap-1.5">
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={Eye}
+            onClick={() => navigate(`/admin/students/${row.id}`)}
+            title="Lihat Detail Profil & Raport"
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={Edit2}
             onClick={() => handleOpenEdit(row)}
-            className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition-colors"
-            title="Edit Data"
-          >
-            <Edit2 className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
+            title="Edit Data Santri"
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={Trash2}
+            className="text-rose-600 hover:bg-rose-50"
             onClick={() => handleOpenDelete(row)}
-            className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-            title="Hapus Data"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+            title="Hapus Santri"
+          />
         </div>
       ),
     },
@@ -287,49 +355,74 @@ export function StudentsManagement() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Header Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
         <div>
-          <h2 className="text-xl font-bold text-slate-800">Manajemen Data Santri</h2>
-          <p className="text-xs text-slate-500">Kelola seluruh data santri, target hafalan, dan kelompok pembimbing</p>
+          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-800 tracking-tight">
+            Manajemen Data Santri
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Kelola seluruh data santri, kelompok tahfidz, target hafalan, dan informasi wali.
+          </p>
         </div>
-        <Button onClick={handleOpenCreate} icon={Plus}>
-          Tambah Santri Baru
-        </Button>
+
+        <div className="flex items-center gap-2.5">
+          <Button
+            variant="secondary"
+            icon={Settings2}
+            onClick={() => setIsTargetModalOpen(true)}
+          >
+            Kelola Target
+          </Button>
+          <Button
+            variant="primary"
+            icon={Plus}
+            onClick={handleOpenCreate}
+            className="shadow-lg shadow-emerald-600/20"
+          >
+            Tambah Santri Baru
+          </Button>
+        </div>
       </div>
 
-      {/* Filter Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-soft flex flex-col sm:flex-row items-center gap-3">
-        <SearchInput
-          value={search}
-          onChange={(val) => {
-            setSearch(val);
-            setPage(1);
-          }}
-          placeholder="Cari nama santri, NIS, atau wali..."
-        />
-        <div className="w-full sm:w-64">
+      {/* Filter & Search Bar with React-Select */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm items-center">
+        <div className="sm:col-span-2">
+          <SearchInput
+            placeholder="Cari berdasarkan nama, NIS, wali, atau no. HP..."
+            value={search}
+            onChange={(val) => {
+              setSearch(val);
+              setPage(1);
+            }}
+          />
+        </div>
+
+        <div>
           <Select
+            placeholder="-- Semua Kelompok --"
             value={selectedGroup}
             onChange={(e) => {
               setSelectedGroup(e.target.value);
               setPage(1);
             }}
-            placeholder="Semua Kelompok"
-            options={groups.map((g) => ({ value: g.id, label: g.name }))}
+            options={[
+              { value: "", label: "Semua Kelompok" },
+              ...groups.map((g) => ({ value: g.id, label: g.name })),
+            ]}
           />
         </div>
       </div>
 
-      {/* Table */}
-      <div className="space-y-2">
+      {/* Main Table */}
+      <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
         <Table
           columns={columns}
           data={students}
           loading={loading}
-          emptyTitle="Belum Ada Santri"
-          emptyDescription="Silakan tambahkan data santri atau sesuaikan kata kunci pencarian Anda."
+          emptyMessage="Tidak ada data santri ditemukan."
         />
+
         <Pagination
           currentPage={page}
           totalPages={totalPages}
@@ -344,7 +437,7 @@ export function StudentsManagement() {
       <Modal
         isOpen={isFormOpen}
         onClose={() => setIsFormOpen(false)}
-        title={selectedStudent ? "Edit Data Santri" : "Tambah Santri Baru"}
+        title={selectedStudent ? "Edit Profil Santri" : "Tambah Santri Baru"}
         subtitle="Lengkapi data profil santri dan tentukan kelompok pembimbing."
         maxWidth="max-w-2xl"
       >
@@ -373,10 +466,12 @@ export function StudentsManagement() {
                 { value: "L", label: "Laki-laki (Ikhwan)" },
                 { value: "P", label: "Perempuan (Akhwat)" },
               ]}
+              isClearable={false}
               required
             />
             <Input
               label="Tempat Lahir"
+              placeholder="Contoh: Bandung"
               value={formData.birth_place}
               onChange={(e) => setFormData({ ...formData, birth_place: e.target.value })}
             />
@@ -389,36 +484,50 @@ export function StudentsManagement() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Select
-              label="Kelompok Tahfidz"
-              value={formData.group_id}
+            <AsyncSelect
+              label="Kelompok Tahfidz (Cari by API)"
+              placeholder="Ketik untuk mencari kelompok..."
+              loadOptions={loadGroupOptions}
+              value={
+                formData.group_id
+                  ? {
+                      value: formData.group_id,
+                      label:
+                        groups.find((g) => String(g.id) === String(formData.group_id))?.name ||
+                        "Kelompok Terpilih",
+                    }
+                  : null
+              }
               onChange={(e) => setFormData({ ...formData, group_id: e.target.value })}
-              placeholder="-- Pilih Kelompok --"
-              options={groups.map((g) => ({ value: g.id, label: g.name }))}
             />
+
             <Select
               label="Target Hafalan"
               value={formData.target_juz}
               onChange={(e) => setFormData({ ...formData, target_juz: e.target.value })}
-              options={[
-                { value: "Juz 30", label: "Juz 30 (An-Naba s.d An-Nas)" },
-                { value: "Juz 30 & 29", label: "Juz 30 & 29 (Al-Mulk s.d An-Nas)" },
-                { value: "Juz 28 - 30", label: "Juz 28, 29, 30 (3 Juz)" },
-                { value: "5 Juz", label: "Target 5 Juz" },
-                { value: "10 Juz", label: "Target 10 Juz" },
-                { value: "30 Juz", label: "Khatam 30 Juz (Tahfidz Mutqin)" },
-              ]}
+              options={targetOptions.map((t) => ({ value: t.name, label: t.name }))}
+              actionButton={
+                <button
+                  type="button"
+                  onClick={() => setIsTargetModalOpen(true)}
+                  className="text-xs text-emerald-600 font-bold hover:text-emerald-700 hover:underline flex items-center gap-1"
+                >
+                  <Plus className="w-3 h-3" /> Kelola Target
+                </button>
+              }
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
               label="Nama Orang Tua / Wali"
+              placeholder="Nama bapak/ibu wali santri..."
               value={formData.parent_name}
               onChange={(e) => setFormData({ ...formData, parent_name: e.target.value })}
             />
             <Input
               label="No. HP Orang Tua / WhatsApp"
+              placeholder="Contoh: 08123456789"
               value={formData.parent_phone}
               onChange={(e) => setFormData({ ...formData, parent_phone: e.target.value })}
             />
@@ -426,13 +535,14 @@ export function StudentsManagement() {
 
           <Textarea
             label="Alamat Lengkap"
+            placeholder="Alamat domisili santri saat ini..."
             value={formData.address}
             onChange={(e) => setFormData({ ...formData, address: e.target.value })}
             rows={2}
           />
 
           {!selectedStudent && (
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-3">
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
               <h4 className="text-xs font-bold text-slate-700">Akun Login Santri (Opsional)</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Input
@@ -444,6 +554,7 @@ export function StudentsManagement() {
                 <Input
                   label="Password"
                   type="password"
+                  placeholder="Default: password123"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 />
@@ -455,12 +566,24 @@ export function StudentsManagement() {
             <Button variant="secondary" onClick={() => setIsFormOpen(false)} disabled={formLoading}>
               Batal
             </Button>
-            <Button type="submit" loading={formLoading}>
+            <Button type="submit" variant="primary" loading={formLoading}>
               {selectedStudent ? "Simpan Perubahan" : "Tambah Santri"}
             </Button>
           </div>
         </form>
       </Modal>
+
+      {/* Dynamic Target Options Modal */}
+      <TargetOptionsModal
+        isOpen={isTargetModalOpen}
+        onClose={() => setIsTargetModalOpen(false)}
+        onOptionsUpdated={(newOpts) => {
+          setTargetOptions(newOpts);
+          if (newOpts.length > 0 && !formData.target_juz) {
+            setFormData((prev) => ({ ...prev, target_juz: newOpts[0].name }));
+          }
+        }}
+      />
 
       {/* Delete Confirm Modal */}
       <ConfirmModal
