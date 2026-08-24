@@ -17,6 +17,7 @@ import {
   FolderGit2,
   CalendarDays,
   FileSpreadsheet,
+  UserCheck,
 } from "lucide-react";
 
 export function Sidebar({ isOpen, onClose, collapsed, setCollapsed }) {
@@ -26,6 +27,7 @@ export function Sidebar({ isOpen, onClose, collapsed, setCollapsed }) {
     { title: "Dashboard", path: "/admin", icon: LayoutDashboard },
     { title: "Santri", path: "/admin/students", icon: GraduationCap },
     { title: "Guru / Ustadz", path: "/admin/teachers", icon: Users },
+    { title: "Wali Santri", path: "/admin/parents", icon: UserCheck },
     { title: "Kelompok Tahfidz", path: "/admin/groups", icon: FolderGit2 },
     { title: "Laporan Setoran", path: "/admin/reports", icon: BookOpen },
     { title: "Manajemen User", path: "/admin/users", icon: Settings },

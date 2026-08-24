@@ -1813,6 +1813,313 @@ app.get('/api/users', verifyToken, requireRole(['admin']), async (req, res) => {
   }
 });
 
+// 13b. CREATE USER
+app.post('/api/users', verifyToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const { username, password, email, phone, role, status, full_name } = req.body;
+    if (!username || !password || !role) {
+      return res.status(400).json({ success: false, message: 'Username, password, dan role wajib diisi.' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password minimal 6 karakter.' });
+    }
+
+    const validRoles = ['admin', 'guru', 'santri', 'orang_tua'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ success: false, message: 'Role pengguna tidak valid.' });
+    }
+
+    const existingUsers = await db.query(
+      'SELECT id FROM users WHERE username = ? OR (email IS NOT NULL AND email = ? AND email != "") LIMIT 1',
+      [username, email || '']
+    );
+    if (existingUsers.length > 0) {
+      return res.status(400).json({ success: false, message: 'Username atau email sudah digunakan.' });
+    }
+
+    const passwordHash = bcrypt.hashSync(password, 10);
+    const userStatus = status === 'inactive' ? 'inactive' : 'active';
+
+    const userResult = await db.query(`
+      INSERT INTO users (username, email, phone, password_hash, role, status)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [username, email || null, phone || null, passwordHash, role, userStatus]);
+
+    const userId = userResult.insertId;
+
+    // Optional: if role is guru or orang_tua, create placeholder profile if full_name is given
+    if (role === 'guru') {
+      await db.query(`
+        INSERT INTO teachers (user_id, full_name, phone, email, is_active)
+        VALUES (?, ?, ?, ?, ?)
+      `, [userId, full_name || username, phone || null, email || null, userStatus === 'active' ? 1 : 0]);
+    } else if (role === 'orang_tua') {
+      await db.query(`
+        INSERT INTO parents (user_id, full_name, phone, email)
+        VALUES (?, ?, ?, ?)
+      `, [userId, full_name || username, phone || '0', email || null]);
+    }
+
+    await logAudit(req, 'CREATE_USER', 'USER', userId, null, { username, role, email, status: userStatus });
+
+    res.status(201).json({ success: true, message: 'Pengguna baru berhasil dibuat.' });
+  } catch (err) {
+    console.error('Create user error:', err);
+    res.status(500).json({ success: false, message: 'Gagal membuat akun pengguna.' });
+  }
+});
+
+// 13c. UPDATE USER (full update: username, email, phone, role, status, reset password)
+app.put('/api/users/:id', verifyToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { username, email, phone, role, status, password } = req.body;
+
+    const users = await db.query('SELECT * FROM users WHERE id = ? LIMIT 1', [userId]);
+    if (!users || users.length === 0) {
+      return res.status(404).json({ success: false, message: 'User tidak ditemukan.' });
+    }
+    const user = users[0];
+
+    // Prevent admin from deactivating or changing role of their own account
+    if (user.id === req.user.id) {
+      if (status === 'inactive') {
+        return res.status(400).json({ success: false, message: 'Anda tidak dapat menonaktifkan akun Anda sendiri.' });
+      }
+      if (role && role !== 'admin') {
+        return res.status(400).json({ success: false, message: 'Anda tidak dapat mengubah role akun Anda sendiri.' });
+      }
+    }
+
+    // Check unique username or email if changed
+    if (username && username !== user.username) {
+      const existing = await db.query('SELECT id FROM users WHERE username = ? AND id != ? LIMIT 1', [username, userId]);
+      if (existing.length > 0) {
+        return res.status(400).json({ success: false, message: 'Username sudah digunakan oleh akun lain.' });
+      }
+    }
+    if (email && email !== user.email) {
+      const existing = await db.query('SELECT id FROM users WHERE email = ? AND id != ? LIMIT 1', [email, userId]);
+      if (existing.length > 0) {
+        return res.status(400).json({ success: false, message: 'Email sudah digunakan oleh akun lain.' });
+      }
+    }
+
+    const updatedUsername = username || user.username;
+    const updatedEmail = email !== undefined ? (email || null) : user.email;
+    const updatedPhone = phone !== undefined ? (phone || null) : user.phone;
+    const updatedRole = role || user.role;
+    const updatedStatus = status || user.status;
+
+    await db.query(`
+      UPDATE users 
+      SET username = ?, email = ?, phone = ?, role = ?, status = ?, updated_at = NOW() 
+      WHERE id = ?
+    `, [updatedUsername, updatedEmail, updatedPhone, updatedRole, updatedStatus, userId]);
+
+    // Update linked profile status if applicable
+    if (updatedRole === 'guru') {
+      const isActive = updatedStatus === 'active' ? 1 : 0;
+      await db.query('UPDATE teachers SET is_active = ?, phone = COALESCE(?, phone), email = COALESCE(?, email) WHERE user_id = ?', [isActive, updatedPhone, updatedEmail, userId]);
+    } else if (updatedRole === 'santri') {
+      const studentStatus = updatedStatus === 'active' ? 'active' : 'inactive';
+      await db.query('UPDATE students SET status = ?, phone = COALESCE(?, phone) WHERE user_id = ?', [studentStatus, updatedPhone, userId]);
+    } else if (updatedRole === 'orang_tua') {
+      await db.query('UPDATE parents SET phone = COALESCE(?, phone), email = COALESCE(?, email) WHERE user_id = ?', [updatedPhone, updatedEmail, userId]);
+    }
+
+    if (password && password.trim() !== '') {
+      if (password.length < 6) {
+        return res.status(400).json({ success: false, message: 'Password minimal 6 karakter.' });
+      }
+      const passwordHash = bcrypt.hashSync(password, 10);
+      await db.query('UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?', [passwordHash, userId]);
+    }
+
+    await logAudit(req, 'UPDATE_USER', 'USER', userId, user, { username: updatedUsername, role: updatedRole, status: updatedStatus, passwordReset: !!password });
+
+    res.json({ success: true, message: 'Data user berhasil diperbarui.' });
+  } catch (err) {
+    console.error('Update user error:', err);
+    res.status(500).json({ success: false, message: 'Gagal memperbarui data user.' });
+  }
+});
+
+// 13d. DELETE USER
+app.delete('/api/users/:id', verifyToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const users = await db.query('SELECT id, username, role FROM users WHERE id = ? LIMIT 1', [userId]);
+    if (!users || users.length === 0) {
+      return res.status(404).json({ success: false, message: 'User tidak ditemukan.' });
+    }
+    const user = users[0];
+
+    // Prevent admin from deleting their own account
+    if (user.id === req.user.id) {
+      return res.status(400).json({ success: false, message: 'Anda tidak dapat menghapus akun Anda sendiri.' });
+    }
+
+    await db.query('DELETE FROM users WHERE id = ?', [userId]);
+    await logAudit(req, 'DELETE_USER', 'USER', userId, user, null);
+
+    res.json({ success: true, message: 'User berhasil dihapus.' });
+  } catch (err) {
+    console.error('Delete user error:', err);
+    res.status(500).json({ success: false, message: 'Gagal menghapus user.' });
+  }
+});
+
+// 13d. PARENTS MANAGEMENT (Wali Santri)
+app.get('/api/parents', verifyToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || '';
+    const offset = (page - 1) * limit;
+
+    let sql = `
+      SELECT p.*, u.username, u.status as user_status, u.last_login_at,
+      (SELECT COUNT(*) FROM students WHERE parent_id = p.id) as total_children
+      FROM parents p
+      JOIN users u ON p.user_id = u.id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (search) {
+      sql += ' AND (p.full_name LIKE ? OR p.phone LIKE ? OR p.email LIKE ? OR u.username LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+    }
+
+    const countSql = sql.replace(/SELECT[\s\S]+?FROM parents p/i, 'SELECT COUNT(*) as count FROM parents p');
+    const [countRes] = await db.query(countSql, params);
+    const total = countRes ? countRes.count : 0;
+
+    sql += ' ORDER BY p.created_at DESC LIMIT ? OFFSET ?';
+    params.push(limit, offset);
+
+    const parents = await db.query(sql, params);
+
+    res.json({
+      success: true,
+      data: parents,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
+    });
+  } catch (err) {
+    console.error('Get parents error:', err);
+    res.status(500).json({ success: false, message: 'Gagal mengambil data wali santri.' });
+  }
+});
+
+app.post('/api/parents', verifyToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const { username, password, full_name, phone, email, address } = req.body;
+    if (!username || !password || !full_name || !phone) {
+      return res.status(400).json({ success: false, message: 'Username, password, nama lengkap, dan no HP wajib diisi.' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password minimal 6 karakter.' });
+    }
+
+    const existingUsers = await db.query('SELECT id FROM users WHERE username = ? OR (email IS NOT NULL AND email = ? AND email != "") LIMIT 1', [username, email || '']);
+    if (existingUsers.length > 0) {
+      return res.status(400).json({ success: false, message: 'Username atau email sudah digunakan.' });
+    }
+
+    const passwordHash = bcrypt.hashSync(password, 10);
+
+    const userResult = await db.query(`
+      INSERT INTO users (username, email, phone, password_hash, role, status)
+      VALUES (?, ?, ?, ?, 'orang_tua', 'active')
+    `, [username, email || null, phone || null, passwordHash]);
+
+    const userId = userResult.insertId;
+
+    const parentResult = await db.query(`
+      INSERT INTO parents (user_id, full_name, phone, email, address)
+      VALUES (?, ?, ?, ?, ?)
+    `, [userId, full_name, phone, email || null, address || null]);
+
+    await logAudit(req, 'CREATE_PARENT', 'PARENT', parentResult.insertId, null, { full_name, username, phone });
+
+    res.status(201).json({ success: true, message: 'Data wali santri berhasil ditambahkan.' });
+  } catch (err) {
+    console.error('Create parent error:', err);
+    res.status(500).json({ success: false, message: 'Gagal menambahkan data wali santri.' });
+  }
+});
+
+app.put('/api/parents/:id', verifyToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const parentId = req.params.id;
+    const { full_name, phone, email, address, password } = req.body;
+
+    const parents = await db.query('SELECT * FROM parents WHERE id = ? LIMIT 1', [parentId]);
+    if (!parents || parents.length === 0) {
+      return res.status(404).json({ success: false, message: 'Data wali santri tidak ditemukan.' });
+    }
+    const parent = parents[0];
+
+    await db.query(`
+      UPDATE parents 
+      SET full_name = ?, phone = ?, email = ?, address = ?, updated_at = NOW()
+      WHERE id = ?
+    `, [full_name, phone, email || null, address || null, parentId]);
+
+    await db.query(`
+      UPDATE users 
+      SET email = ?, phone = ?, updated_at = NOW()
+      WHERE id = ?
+    `, [email || null, phone || null, parent.user_id]);
+
+    if (password && password.trim() !== '') {
+      if (password.length < 6) {
+        return res.status(400).json({ success: false, message: 'Password minimal 6 karakter.' });
+      }
+      const passwordHash = bcrypt.hashSync(password, 10);
+      await db.query('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, parent.user_id]);
+    }
+
+    await logAudit(req, 'UPDATE_PARENT', 'PARENT', parentId, parent, { full_name, phone, email });
+
+    res.json({ success: true, message: 'Data wali santri berhasil diperbarui.' });
+  } catch (err) {
+    console.error('Update parent error:', err);
+    res.status(500).json({ success: false, message: 'Gagal memperbarui data wali santri.' });
+  }
+});
+
+app.delete('/api/parents/:id', verifyToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const parentId = req.params.id;
+    const parents = await db.query('SELECT * FROM parents WHERE id = ? LIMIT 1', [parentId]);
+    if (!parents || parents.length === 0) {
+      return res.status(404).json({ success: false, message: 'Data wali santri tidak ditemukan.' });
+    }
+    const parent = parents[0];
+
+    // Unlink children first (set parent_id to null)
+    await db.query('UPDATE students SET parent_id = NULL WHERE parent_id = ?', [parentId]);
+
+    // Delete user (cascade deletes parent record)
+    await db.query('DELETE FROM users WHERE id = ?', [parent.user_id]);
+    await logAudit(req, 'DELETE_PARENT', 'PARENT', parentId, parent, null);
+
+    res.json({ success: true, message: 'Data wali santri berhasil dihapus.' });
+  } catch (err) {
+    console.error('Delete parent error:', err);
+    res.status(500).json({ success: false, message: 'Gagal menghapus data wali santri.' });
+  }
+});
+
 // 14. EXPORT REPORTS TO CSV
 app.get('/api/reports/export/csv', verifyToken, requireRole(['admin', 'guru']), async (req, res) => {
   try {

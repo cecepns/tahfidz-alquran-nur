@@ -17,6 +17,7 @@ import { TeachersManagement } from "./pages/admin/TeachersManagement";
 import { GroupsManagement } from "./pages/admin/GroupsManagement";
 import { ReportsManagement } from "./pages/admin/ReportsManagement";
 import { UsersManagement } from "./pages/admin/UsersManagement";
+import { ParentsManagement } from "./pages/admin/ParentsManagement";
 import { AuditLogsPage } from "./pages/admin/AuditLogsPage";
 
 // Guru Pages
@@ -135,6 +136,14 @@ export function App() {
           element={
             <ProtectedRoute allowedRoles={["admin"]}>
               <UsersManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/parents"
+          element={
+            <ProtectedRoute allowedRoles={["admin"]}>
+              <ParentsManagement />
             </ProtectedRoute>
           }
         />

@@ -69,7 +69,17 @@ export const API_ENDPOINTS = {
   USERS: {
     LIST: "/users",
     DETAIL: (id) => `/users/${id}`,
+    CREATE: "/users",
     UPDATE: (id) => `/users/${id}`,
+    DELETE: (id) => `/users/${id}`,
+  },
+
+  PARENTS: {
+    LIST: "/parents",
+    DETAIL: (id) => `/parents/${id}`,
+    CREATE: "/parents",
+    UPDATE: (id) => `/parents/${id}`,
+    DELETE: (id) => `/parents/${id}`,
   },
 
   AUDIT_LOGS: {
