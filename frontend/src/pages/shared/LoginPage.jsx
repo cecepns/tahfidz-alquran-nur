@@ -3,7 +3,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "../../components/common/Button";
 import { Input } from "../../components/common/Input";
-import { Lock, User, Sparkles, BookOpen, Shield, GraduationCap, Users } from "lucide-react";
+import { Lock, User } from "lucide-react";
 
 export function LoginPage() {
   const { login } = useAuth();
@@ -27,20 +27,6 @@ export function LoginPage() {
       else if (res.user.role === "santri") navigate("/santri");
       else if (res.user.role === "orang_tua") navigate("/parent");
       else navigate("/");
-    }
-  };
-
-  const handleQuickLogin = async (userAcc, passAcc) => {
-    setUsername(userAcc);
-    setPassword(passAcc);
-    setLoading(true);
-    const res = await login(userAcc, passAcc);
-    setLoading(false);
-    if (res.success) {
-      if (res.user.role === "admin") navigate("/admin");
-      else if (res.user.role === "guru") navigate("/guru");
-      else if (res.user.role === "santri") navigate("/santri");
-      else if (res.user.role === "orang_tua") navigate("/parent");
     }
   };
 
@@ -101,65 +87,9 @@ export function LoginPage() {
               </Button>
             </div>
           </form>
-
-          {/* Quick Demo Switcher */}
-          <div className="mt-6 pt-6 border-t border-slate-100">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider text-center mb-3 flex items-center justify-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-              Demo Akun (1-Click Login)
-            </p>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => handleQuickLogin("admin", "password123")}
-                className="p-2.5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-left transition-all group"
-              >
-                <div className="flex items-center gap-1.5 font-bold text-slate-800 group-hover:text-emerald-700">
-                  <Shield className="w-3.5 h-3.5 text-emerald-600" />
-                  Admin
-                </div>
-                <span className="text-[11px] text-slate-400">admin</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickLogin("ustadz.ahmad", "password123")}
-                className="p-2.5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-left transition-all group"
-              >
-                <div className="flex items-center gap-1.5 font-bold text-slate-800 group-hover:text-emerald-700">
-                  <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
-                  Guru
-                </div>
-                <span className="text-[11px] text-slate-400">ustadz.ahmad</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickLogin("ahmad.fauzan", "password123")}
-                className="p-2.5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-left transition-all group"
-              >
-                <div className="flex items-center gap-1.5 font-bold text-slate-800 group-hover:text-emerald-700">
-                  <GraduationCap className="w-3.5 h-3.5 text-emerald-600" />
-                  Santri
-                </div>
-                <span className="text-[11px] text-slate-400">ahmad.fauzan</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickLogin("wali.ahmad", "password123")}
-                className="p-2.5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-left transition-all group"
-              >
-                <div className="flex items-center gap-1.5 font-bold text-slate-800 group-hover:text-emerald-700">
-                  <Users className="w-3.5 h-3.5 text-emerald-600" />
-                  Orang Tua
-                </div>
-                <span className="text-[11px] text-slate-400">wali.ahmad</span>
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
   );
 }
+
