@@ -129,7 +129,7 @@ export function SetoranHistoryGuru() {
             options={[
               { value: "NEW_MEMORIZATION", label: "Hafalan Baru" },
               { value: "DAILY_MUROJAAH", label: "Murojaah Harian" },
-              { value: "WEEKLY_MUROJAAH", label: "Murojaah Pekanan" },
+              { value: "WEEKLY_MUROJAAH", label: "Murojaah Mingguan" },
             ]}
           />
         </div>

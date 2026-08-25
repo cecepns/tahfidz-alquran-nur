@@ -1202,21 +1202,42 @@ app.delete('/api/groups/:id', verifyToken, requireRole(['admin']), async (req, r
 app.get('/api/groups/:id/students', verifyToken, async (req, res) => {
   try {
     const groupId = req.params.id;
-    const today = new Date().toISOString().split('T')[0];
+    const targetDate = req.query.date || new Date().toISOString().split('T')[0];
 
     const students = await db.query(`
       SELECT s.*, 
         (SELECT score FROM memorization_reports WHERE student_id = s.id AND date = ? AND type = 'NEW_MEMORIZATION' LIMIT 1) as today_hafalan_score,
         (SELECT surah_name FROM memorization_reports WHERE student_id = s.id AND date = ? AND type = 'NEW_MEMORIZATION' LIMIT 1) as today_hafalan_surah,
+        (SELECT surah_id FROM memorization_reports WHERE student_id = s.id AND date = ? AND type = 'NEW_MEMORIZATION' LIMIT 1) as today_hafalan_surah_id,
         (SELECT start_ayah FROM memorization_reports WHERE student_id = s.id AND date = ? AND type = 'NEW_MEMORIZATION' LIMIT 1) as today_start_ayah,
         (SELECT end_ayah FROM memorization_reports WHERE student_id = s.id AND date = ? AND type = 'NEW_MEMORIZATION' LIMIT 1) as today_end_ayah,
+
+        (SELECT score FROM memorization_reports WHERE student_id = s.id AND date = ? AND type = 'DAILY_MUROJAAH' LIMIT 1) as today_murojaah_harian_score,
+        (SELECT surah_name FROM memorization_reports WHERE student_id = s.id AND date = ? AND type = 'DAILY_MUROJAAH' LIMIT 1) as today_murojaah_harian_surah,
+        (SELECT surah_id FROM memorization_reports WHERE student_id = s.id AND date = ? AND type = 'DAILY_MUROJAAH' LIMIT 1) as today_murojaah_harian_surah_id,
+        (SELECT start_ayah FROM memorization_reports WHERE student_id = s.id AND date = ? AND type = 'DAILY_MUROJAAH' LIMIT 1) as today_murojaah_harian_start_ayah,
+        (SELECT end_ayah FROM memorization_reports WHERE student_id = s.id AND date = ? AND type = 'DAILY_MUROJAAH' LIMIT 1) as today_murojaah_harian_end_ayah,
+
+        (SELECT score FROM memorization_reports WHERE student_id = s.id AND date = ? AND type = 'WEEKLY_MUROJAAH' LIMIT 1) as today_murojaah_mingguan_score,
+        (SELECT surah_name FROM memorization_reports WHERE student_id = s.id AND date = ? AND type = 'WEEKLY_MUROJAAH' LIMIT 1) as today_murojaah_mingguan_surah,
+        (SELECT surah_id FROM memorization_reports WHERE student_id = s.id AND date = ? AND type = 'WEEKLY_MUROJAAH' LIMIT 1) as today_murojaah_mingguan_surah_id,
+        (SELECT start_ayah FROM memorization_reports WHERE student_id = s.id AND date = ? AND type = 'WEEKLY_MUROJAAH' LIMIT 1) as today_murojaah_mingguan_start_ayah,
+        (SELECT end_ayah FROM memorization_reports WHERE student_id = s.id AND date = ? AND type = 'WEEKLY_MUROJAAH' LIMIT 1) as today_murojaah_mingguan_end_ayah,
+
         (SELECT score FROM memorization_reports WHERE student_id = s.id AND date = ? AND type != 'NEW_MEMORIZATION' LIMIT 1) as today_murojaah_score,
-        (SELECT status FROM attendance WHERE student_id = s.id AND date = ? LIMIT 1) as today_attendance
+        (SELECT status FROM attendance WHERE student_id = s.id AND date = ? LIMIT 1) as today_attendance,
+        (SELECT notes FROM attendance WHERE student_id = s.id AND date = ? LIMIT 1) as today_attendance_notes
       FROM students s
       JOIN group_members gm ON s.id = gm.student_id
       WHERE gm.group_id = ? AND s.status = 'active'
       ORDER BY s.full_name ASC
-    `, [today, today, today, today, today, today, groupId]);
+    `, [
+      targetDate, targetDate, targetDate, targetDate, targetDate,
+      targetDate, targetDate, targetDate, targetDate, targetDate,
+      targetDate, targetDate, targetDate, targetDate, targetDate,
+      targetDate, targetDate, targetDate,
+      groupId
+    ]);
 
     res.json({ success: true, data: students });
   } catch (err) {
@@ -1410,7 +1431,7 @@ app.post('/api/reports/quick-batch', verifyToken, requireRole(['admin', 'guru'])
         `, [studentId, group_id, teacherId, date, item.attendance, item.attendance_notes || null]);
       }
 
-      // 2. Hafalan Baru
+      // 2. Hafalan Baru (Ziyadah)
       if (item.hafalan && item.hafalan.score) {
         const h = item.hafalan;
         let surah = null;
@@ -1436,30 +1457,56 @@ app.post('/api/reports/quick-batch', verifyToken, requireRole(['admin', 'guru'])
         savedCount++;
       }
 
-      // 3. Murojaah
-      if (item.murojaah && item.murojaah.score) {
-        const m = item.murojaah;
+      // 3. Murojaah Harian (Sabaq)
+      const mHarian = item.murojaah_harian || (item.murojaah && item.murojaah.type !== 'WEEKLY_MUROJAAH' ? item.murojaah : null);
+      if (mHarian && mHarian.score) {
         let surah = null;
-        if (m.surah_id) {
-          const [surahs] = await conn.query('SELECT * FROM quran_surahs WHERE id = ? OR number = ? LIMIT 1', [m.surah_id, m.surah_id]);
+        if (mHarian.surah_id) {
+          const [surahs] = await conn.query('SELECT * FROM quran_surahs WHERE id = ? OR number = ? LIMIT 1', [mHarian.surah_id, mHarian.surah_id]);
           surah = surahs[0] || null;
         }
-        const sAyah = parseInt(m.start_ayah) || 1;
-        const eAyah = parseInt(m.end_ayah) || (surah ? surah.total_ayahs : sAyah);
+        const sAyah = parseInt(mHarian.start_ayah) || 1;
+        const eAyah = parseInt(mHarian.end_ayah) || (surah ? surah.total_ayahs : sAyah);
         const totalAyahs = Math.max(1, eAyah - sAyah + 1);
 
         await conn.query(`
           INSERT INTO memorization_reports (
             student_id, teacher_id, group_id, date, type, surah_id, surah_name,
             start_ayah, end_ayah, total_ayahs, juz_number, score, notes
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, 'DAILY_MUROJAAH', ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
           studentId, teacherId, group_id, date,
-          m.type || 'DAILY_MUROJAAH',
           surah ? surah.id : null,
-          surah ? surah.name_latin : (m.surah_name || 'Murojaah'),
+          surah ? surah.name_latin : (mHarian.surah_name || 'Murojaah Harian'),
           sAyah, eAyah, totalAyahs, surah ? surah.starting_juz : null,
-          m.score, m.notes || null
+          mHarian.score, mHarian.notes || null
+        ]);
+        savedCount++;
+      }
+
+      // 4. Murojaah Mingguan (Manzil / Pekanan)
+      const mMingguan = item.murojaah_mingguan || item.murojaah_pekanan || item.murojaah_weekly || (item.murojaah && item.murojaah.type === 'WEEKLY_MUROJAAH' ? item.murojaah : null);
+      if (mMingguan && mMingguan.score) {
+        let surah = null;
+        if (mMingguan.surah_id) {
+          const [surahs] = await conn.query('SELECT * FROM quran_surahs WHERE id = ? OR number = ? LIMIT 1', [mMingguan.surah_id, mMingguan.surah_id]);
+          surah = surahs[0] || null;
+        }
+        const sAyah = parseInt(mMingguan.start_ayah) || 1;
+        const eAyah = parseInt(mMingguan.end_ayah) || (surah ? surah.total_ayahs : sAyah);
+        const totalAyahs = Math.max(1, eAyah - sAyah + 1);
+
+        await conn.query(`
+          INSERT INTO memorization_reports (
+            student_id, teacher_id, group_id, date, type, surah_id, surah_name,
+            start_ayah, end_ayah, total_ayahs, juz_number, score, notes
+          ) VALUES (?, ?, ?, ?, 'WEEKLY_MUROJAAH', ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          studentId, teacherId, group_id, date,
+          surah ? surah.id : null,
+          surah ? surah.name_latin : (mMingguan.surah_name || 'Murojaah Mingguan'),
+          sAyah, eAyah, totalAyahs, surah ? surah.starting_juz : null,
+          mMingguan.score, mMingguan.notes || null
         ]);
         savedCount++;
       }

@@ -275,7 +275,7 @@ export function ReportsManagement() {
             options={[
               { value: "NEW_MEMORIZATION", label: "Hafalan Baru" },
               { value: "DAILY_MUROJAAH", label: "Murojaah Harian" },
-              { value: "WEEKLY_MUROJAAH", label: "Murojaah Pekanan" },
+              { value: "WEEKLY_MUROJAAH", label: "Murojaah Mingguan" },
             ]}
           />
 
@@ -339,8 +339,8 @@ export function ReportsManagement() {
             onChange={(e) => setEditFormData({ ...editFormData, type: e.target.value })}
             options={[
               { value: "NEW_MEMORIZATION", label: "Hafalan Baru" },
-              { value: "DAILY_MUROJAAH", label: "Murojaah Harian (Senin-Kamis)" },
-              { value: "WEEKLY_MUROJAAH", label: "Murojaah Pekanan (Jumat)" },
+              { value: "DAILY_MUROJAAH", label: "Murojaah Harian" },
+              { value: "WEEKLY_MUROJAAH", label: "Murojaah Mingguan" },
             ]}
             required
           />

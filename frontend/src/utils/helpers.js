@@ -115,8 +115,8 @@ export const REPORT_TYPE_MAP = {
     badge: "bg-blue-100 text-blue-800 border-blue-200",
   },
   WEEKLY_MUROJAAH: {
-    label: "Murojaah Pekanan (Jumat)",
-    shortLabel: "Pekanan",
+    label: "Murojaah Mingguan",
+    shortLabel: "Mingguan",
     badge: "bg-purple-100 text-purple-800 border-purple-200",
   },
 };
